@@ -12,7 +12,7 @@
   var HOLD_HOURS = 48;
   var CART_KEY = "laferia-pedido-v2";
   var HOLD_KEY = "laferia-reservas-v2";
-  var CACHE_KEY = "laferia-catalogo-cache";
+  var CACHE_KEY = "laferia-catalogo-cache-v2";
 
   var COLS = {
     code: ["codigo", "cod", "sku", "codigo de producto", "codigo interno"],
@@ -223,26 +223,52 @@
     return products;
   }
 
-  function loadCatalog() {
+  function scriptUrl() { return String(CFG.scriptUrl || "").trim(); }
+  function fetchCsvMatrix() {
     var url = String(CFG.sheetCsvUrl || "").trim() || "catalogo.csv";
     var sep = url.indexOf("?") >= 0 ? "&" : "?";
-    return fetch(url + sep + "t=" + Math.floor(Date.now() / 60000), { cache: "no-store" })
+    return fetch(url + sep + "t=" + Date.now(), { cache: "no-store" })
       .then(function (r) {
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.text();
       })
       .then(function (text) {
         if (/^\s*<(!doctype|html)/i.test(text)) throw new Error("El link de la planilla no devuelve un CSV.");
-        var list = buildCatalog(parseDelimited(text));
-        lsSet(CACHE_KEY, text);
+        return parseDelimited(text);
+      });
+  }
+  // Lectura en vivo desde la planilla (Apps Script). Si falla, usa el CSV publicado.
+  function fetchMatrix() {
+    var su = scriptUrl();
+    if (!su) return fetchCsvMatrix();
+    return fetch(su + (su.indexOf("?") >= 0 ? "&" : "?") + "t=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+      .then(function (j) { if (!j || !j.ok || !Array.isArray(j.rows)) throw new Error("Respuesta inválida"); return j.rows; })
+      .catch(function (err) {
+        console.warn("La Feria: lectura en vivo falló, uso el CSV.", err);
+        return fetchCsvMatrix();
+      });
+  }
+  function loadCatalog() {
+    return fetchMatrix()
+      .then(function (matrix) {
+        var list = buildCatalog(matrix);
+        lsSet(CACHE_KEY, JSON.stringify(matrix));
         return list;
       })
       .catch(function (err) {
         console.error("La Feria: no se pudo leer el catálogo.", err);
         var cached = lsGet(CACHE_KEY);
-        if (cached) { try { return buildCatalog(parseDelimited(cached)); } catch (e) {} }
+        if (cached) { try { return buildCatalog(JSON.parse(cached)); } catch (e) {} }
         throw err;
       });
+  }
+  // Marca las prendas como Reservada en la planilla. Responde {ok} o {ok:false, error:"taken", taken:[códigos]}.
+  function reserveCodes(codes) {
+    var su = scriptUrl();
+    if (!su) return Promise.resolve({ ok: true, skipped: true });
+    return fetch(su, { method: "POST", body: JSON.stringify({ action: "reserve", codes: codes }) })
+      .then(function (r) { return r.json(); });
   }
 
   /* ---------- Estado ---------- */
@@ -275,9 +301,22 @@
     try { var raw = JSON.parse(lsGet(CART_KEY) || "[]"); return Array.isArray(raw) ? raw : []; } catch (e) { return []; }
   }
   function saveCart() { lsSet(CART_KEY, JSON.stringify(cart)); }
+  // Saca del pedido las prendas que ya no están disponibles y devuelve sus nombres.
   function pruneCart() {
-    cart = cart.filter(function (c) { var p = byCode(c); return p && !isTaken(p); });
+    var gone = [];
+    cart = cart.filter(function (c) {
+      var p = byCode(c);
+      var ok = p && !isTaken(p);
+      if (!ok && p) gone.push(p.name);
+      return ok;
+    });
     saveCart();
+    return gone;
+  }
+  function goneMsg(names) {
+    return names.length === 1
+      ? "«" + names[0] + "» acaba de ser reservada por otra persona y la sacamos de tu pedido."
+      : "Estas prendas acaban de ser reservadas por otra persona y las sacamos de tu pedido: " + names.join(", ") + ".";
   }
   function cartItems() { return cart.map(byCode).filter(Boolean); }
   function allCats() { return CATS.concat(extraCats); }
@@ -611,9 +650,26 @@
     return { alias: String(CFG.alias || "").trim(), titular: String(CFG.titular || "").trim() };
   }
   function waLink() { return "https://wa.me/" + waNumber() + "?text=" + encodeURIComponent(orderText()); }
+  var checking = false;
+  // Antes de mostrar los datos para transferir, confirma que las prendas sigan libres.
   function openPay() {
-    if (!cartItems().length || !waNumber()) return;
+    if (checking || !cartItems().length || !waNumber()) return;
     if (!validateShip()) return;
+    var btn = $("wa");
+    checking = true;
+    btn.disabled = true;
+    btn.textContent = "Verificando disponibilidad…";
+    loadCatalog().then(function (list) { products = list; status = "ok"; }, function () {}).then(function () {
+      checking = false;
+      btn.disabled = false;
+      btn.textContent = "Enviar pedido por WhatsApp";
+      var gone = pruneCart();
+      renderAll();
+      if (gone.length) { toast(goneMsg(gone)); return; }
+      if (cartItems().length) showPay();
+    });
+  }
+  function showPay() {
     var total = subtotal() + shipCost();
     var info = payInfo();
     modal = { type: "pay" };
@@ -626,9 +682,43 @@
       "<div><dt>Titular</dt><dd>" + esc(info.titular) + "</dd></div></dl>" +
       '<ol class="steps pay-steps"><li><span class="t">Hacé la transferencia por el total desde tu app del banco.</span></li>' +
       '<li><span class="t">Tocá el botón de abajo y mandá el pedido por WhatsApp junto con el comprobante.</span></li></ol>' +
+      '<p class="form-err" id="pay-err" role="alert"></p>' +
       '<p class="note">La reserva queda confirmada cuando te respondemos por WhatsApp con el comprobante recibido.</p>' +
-      '<div class="m-foot"><div class="grp"><a class="btn accent" id="pay-go" href="' + esc(waLink()) + '" target="_blank" rel="noopener">Ya transferí, enviar por WhatsApp</a>' +
+      '<div class="m-foot"><div class="grp"><button class="btn accent" id="pay-go" type="button">Ya transferí, enviar por WhatsApp</button>' +
       '<button class="btn ghost" type="button" data-close>Volver al pedido</button></div></div></div>');
+  }
+  var sending = false;
+  function sendOrder(btn) {
+    if (sending) return;
+    var codes = cart.slice();
+    var link = waLink();
+    // Se abre la pestaña ya (si no, el navegador la bloquea) y se completa después de reservar.
+    var win = null;
+    try { win = window.open("", "_blank"); } catch (e) {}
+    sending = true;
+    btn.disabled = true;
+    btn.textContent = "Reservando tus prendas…";
+    function go() {
+      if (win && !win.closed) win.location.href = link; else window.location.href = link;
+      holdCart();
+    }
+    reserveCodes(codes).then(function (res) {
+      sending = false;
+      if (res && res.ok) { go(); return; }
+      if (res && res.error === "taken" && Array.isArray(res.taken) && res.taken.length) {
+        if (win) win.close();
+        res.taken.forEach(function (c) { var p = byCode(c); if (p) p.reserved = true; });
+        var gone = pruneCart();
+        closeModal();
+        renderAll();
+        toast(goneMsg(gone.length ? gone : res.taken) + " No transfieras todavía: revisá tu pedido.");
+        return;
+      }
+      go(); // Error del servidor: igual se manda el pedido y se confirma por WhatsApp.
+    }, function () {
+      sending = false;
+      go();
+    });
   }
   function holdCart() {
     var now = Date.now();
@@ -677,7 +767,7 @@
     if (t.hasAttribute("data-close")) { closeModal(); return; }
     if (d.act === "pay") { openPay(); return; }
     if (d.act === "copy-alias") { copyAlias(); return; }
-    if (t.id === "pay-go") setTimeout(holdCart, 60);
+    if (t.id === "pay-go") sendOrder(t);
     else if (t.id === "open-cart") openCart();
     else if (t.id === "close-cart") closeCart();
     else if (t.id === "clear") { cart = []; saveCart(); renderGrid(); renderCart(); }
@@ -706,13 +796,23 @@
   saveHolds();
   cart = loadCart();
   renderAll();
-  loadCatalog().then(function (list) {
-    products = list;
-    status = "ok";
-  }, function () {
-    status = "error";
-  }).then(function () {
-    pruneCart();
-    renderAll();
-  });
+  function refresh(first) {
+    return loadCatalog().then(function (list) {
+      products = list;
+      status = "ok";
+    }, function () {
+      if (first) status = "error";
+    }).then(function () {
+      var gone = pruneCart();
+      renderGrid();
+      renderChips();
+      renderCart();
+      if (first) renderMisc(); else refreshDetail();
+      if (gone.length && !first) toast(goneMsg(gone));
+    });
+  }
+  refresh(true);
+  // Se actualiza sola cada minuto y al volver a la pestaña.
+  setInterval(function () { if (!document.hidden && !checking && !sending && (!modal || modal.type !== "pay")) refresh(false); }, 60000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden && !checking && !sending) refresh(false); });
 })();

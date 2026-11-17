@@ -13,6 +13,13 @@ window.LAFERIA_CONFIG = {
      Si lo dejás vacío, la tienda usa el archivo catalogo.csv del sitio. */
   sheetCsvUrl: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRAbSfYHAqD35hKIo66x4cit8AFLpJcfgxFafS1zF3I0kvAKIOlCQiweasdIZpa7jWMKXYtNTvcHNC6/pub?gid=1132895453&single=true&output=csv",
 
+  /* --- Reservas automáticas ---------------------------------------------
+     Link de la "Aplicación web" de Apps Script (termina en /exec).
+     Con este link la tienda lee la planilla en vivo y, cuando alguien envía
+     un pedido, marca sus prendas como "Reservada" para todas las visitas.
+     Si lo dejás vacío, la tienda funciona igual pero sin reservas automáticas. */
+  scriptUrl: "https://script.google.com/macros/s/AKfycbxTiO2S1HU0I3ABlpubBHql4vGHT1pbscVeea1GHWrfsqCn9r7OcJ1wex838ISDutEm/exec",
+
   /* --- Contacto ------------------------------------------------------- */
   // Con código de país, sin espacios ni signos: 549 + código de área sin 0 + número sin 15.
   whatsapp: "5493413700209",
