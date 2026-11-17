@@ -382,9 +382,19 @@
   function sil(shape) {
     return '<svg class="sil" viewBox="0 0 100 100" aria-hidden="true" focusable="false"><use href="#s-' + esc(shape) + '"/></svg>';
   }
+  // Fotos de la carpeta fotos/: si no está con la extensión pedida, se prueban las otras comunes
+  // (los celulares guardan .jpeg, .JPG, .png…). Lo que se encuentra se recuerda para no volver a buscar.
+  var PHOTO_EXTS = ["jpg", "jpeg", "JPG", "JPEG", "png", "PNG", "webp"];
+  var photoFound = {};
+  function psrc(u) { return Object.prototype.hasOwnProperty.call(photoFound, u) ? photoFound[u] : u; }
+  function imgTag(u, cls, alt, lazy) {
+    var src = psrc(u);
+    if (!src) return "";
+    return '<img' + (cls ? ' class="' + cls + '"' : "") + ' src="' + esc(src) + '" data-orig="' + esc(u) + '" alt="' + esc(alt || "") + '"' + (lazy ? ' loading="lazy"' : "") + ' decoding="async">';
+  }
   function media(p, idx, alt, eager) {
     var u = p.photos && p.photos[idx || 0];
-    return sil(p.shape) + (u ? '<img class="photo" src="' + esc(u) + '" alt="' + esc(alt || "") + '"' + (eager ? "" : ' loading="lazy"') + ' decoding="async">' : "");
+    return sil(p.shape) + (u && psrc(u) ? '<img class="photo" src="' + esc(psrc(u)) + '" data-orig="' + esc(u) + '" alt="' + esc(alt || "") + '"' + (eager ? "" : ' loading="lazy"') + ' decoding="async">' : "");
   }
   function condBadge(p) { return p.cond ? '<span class="badge">' + esc(p.cond) + "</span>" : ""; }
 
@@ -622,7 +632,7 @@
       (isTaken(p) ? '<span class="sold-mark">' + takenLabel(p) + "</span>" : "") + "</div>";
     var thumbs = photos.length > 1
       ? '<div class="thumbs">' + photos.map(function (u, i) {
-        return '<button type="button" class="thumb" data-thumb="' + i + '" aria-pressed="' + (i === idx) + '" aria-label="Foto ' + (i + 1) + '"><img src="' + esc(u) + '" alt=""></button>';
+        return '<button type="button" class="thumb" data-thumb="' + i + '" aria-pressed="' + (i === idx) + '" aria-label="Foto ' + (i + 1) + '">' + imgTag(u, "", "", false) + '</button>';
       }).join("") + "</div>"
       : "";
     return mHead(p.name) + '<div class="m-body"><div class="detail"><div class="gallery">' + big + thumbs + "</div>" +
@@ -787,10 +797,26 @@
     if (!$("modal").hidden) closeModal();
     else if (!$("drawer").hidden) closeCart();
   });
+  document.addEventListener("load", function (e) {
+    var t = e.target;
+    if (t && t.tagName === "IMG" && t.getAttribute("data-orig")) photoFound[t.getAttribute("data-orig")] = t.getAttribute("src");
+  }, true);
   // Si una foto no existe, queda el dibujo de la prenda.
   document.addEventListener("error", function (e) {
     var t = e.target;
     if (t && t.tagName === "IMG") {
+      var orig = t.getAttribute("data-orig") || "";
+      var m = /^(fotos\/.+)\.([A-Za-z]+)$/.exec(t.getAttribute("src") || "");
+      if (orig && m) {
+        var tried = (t.getAttribute("data-tried") || m[2]).split(",");
+        var next = PHOTO_EXTS.filter(function (x) { return tried.indexOf(x) < 0; })[0];
+        if (next) {
+          t.setAttribute("data-tried", tried.concat(next).join(","));
+          t.src = m[1] + "." + next;
+          return;
+        }
+        photoFound[orig] = ""; // no existe con ninguna extensión
+      }
       if (t.classList.contains("photo")) t.hidden = true;
       else if (t.parentNode && t.parentNode.classList.contains("thumb")) t.parentNode.hidden = true;
     }

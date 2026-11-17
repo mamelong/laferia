@@ -27,4 +27,4 @@ Columnas (la primera fila lleva estos títulos, el orden no importa):
 - Las filas nuevas van **abajo**: "Más nuevo" muestra primero las últimas filas.
 - Los cambios en la planilla tardan **unos 5 minutos** en verse (Google lo cachea).
 
-Nombres de fotos: respetá mayúsculas (`AD001-1.jpg` ≠ `ad001-1.JPG`). Ideal: JPG de ~1200 px de lado y menos de 300 KB.
+Nombres de fotos: el código va en mayúsculas (`AD001-1`). La extensión puede ser .jpg, .jpeg, .png o .webp. Ideal: JPG de ~1200 px de lado y menos de 300 KB.
