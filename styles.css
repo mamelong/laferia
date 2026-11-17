@@ -15,38 +15,7 @@
   --display: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --body: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --mono: "Archivo", "Helvetica Neue", Helvetica, Arial, sans-serif;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #0e0e0e;
-    --ink: #f3f3f1;
-    --muted: #9a9a96;
-    --line: #2c2c2a;
-    --card: #161615;
-    --accent: #f3f3f1;
-    --accent-ink: #0e0e0e;
-    --tile-bg: #1d1d1c;
-    --tile-fg: #d8d8d4;
-    --danger: #ff8f86;
-    --btn-bg: #f3f3f1;
-    --btn-fg: #0e0e0e;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --paper: #0e0e0e;
-  --ink: #f3f3f1;
-  --muted: #9a9a96;
-  --line: #2c2c2a;
-  --card: #161615;
-  --accent: #f3f3f1;
-  --accent-ink: #0e0e0e;
-  --tile-bg: #1d1d1c;
-  --tile-fg: #d8d8d4;
-  --danger: #ff8f86;
-  --btn-bg: #f3f3f1;
-  --btn-fg: #0e0e0e;
-  color-scheme: dark;
+  color-scheme: light; /* la tienda siempre se ve clara */
 }
 
 * { box-sizing: border-box; }
