@@ -531,8 +531,8 @@
     var cost = shipCost();
     var line = "--------------------";
     function clean(v) { return String(v || "").replace(/[*_~]/g, ""); }
-    var txt = "Hola! Quiero reservar estas prendas de La Feria:\n\n" +
-      "*Detalle del pedido*\n" +
+    var txt = "Hola! 👋 Quiero reservar estas prendas de La Feria:\n\n" +
+      "*Detalle del pedido* 🛍️\n" +
       items.map(function (p) { return "- " + p.name + " (talle " + p.size + ") " + fmt(p.price) + " [" + p.code + "]"; }).join("\n");
     if (ship) {
       txt += "\n" + line + "\n*Datos de envío*\n*Medio de envío:* " + shipLabel() + " (" + (cost ? fmt(cost) : "gratis") + ")";
