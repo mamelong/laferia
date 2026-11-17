@@ -286,7 +286,9 @@
     for (var i = 0; i < products.length; i++) if (products[i].code === code) return products[i];
     return null;
   }
+  // Con reservas automáticas la planilla manda: no se guardan reservas en el navegador.
   function loadHolds() {
+    if (scriptUrl()) return {};
     try {
       var r = JSON.parse(lsGet(HOLD_KEY) || "{}"), now = Date.now(), out = {};
       Object.keys(r).forEach(function (k) { if (now - r[k] < HOLD_HOURS * 3600e3) out[k] = r[k]; });
@@ -722,7 +724,11 @@
   }
   function holdCart() {
     var now = Date.now();
-    cart.forEach(function (c) { holds[c] = now; });
+    cart.forEach(function (c) {
+      var p = byCode(c);
+      if (scriptUrl()) { if (p) p.reserved = true; } // se ve al instante; la próxima lectura trae lo que diga la planilla
+      else holds[c] = now;
+    });
     saveHolds();
     cart = [];
     saveCart();
